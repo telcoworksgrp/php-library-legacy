@@ -12,9 +12,9 @@ namespace TCorp\Legacy;
 
 
 /**
- * Helper class for working with Telecom Corp's Legacy sites/projects
+ * Legacy helper class for working with Telecom Corp's Legacy sites/projects
  */
-class Helper
+class LegacyHelper
 {
 
     /**
@@ -35,6 +35,7 @@ class Helper
      */
     const WORST_SPAM_COUNTRIES = array('CN','RU','UA','IN','FR','JP','GB',
     'HK','DE','EG','VN','IR','BR','TH','ID','PA','GG');
+
 
 
     /**
@@ -82,16 +83,14 @@ class Helper
     public static function sendRequest(string $url, string $method = 'GET',
         $data = [], $headers = [])
     {
+        // Send the HTTP request and get the response
+        $response = Factory::getHttp()->request($method, $url, [
+            'query'       => $data,
+            'headers'     => $headers,
+            'http_errors' => true
+        ]);
 
-        // Initialise a HTTP client and send the request
-        $client                 = new \GuzzleHttp\Client();
-        $options                = [];
-        $options['query']       = $data;
-        $options['headers']     = $headers;
-        $options['http_errors'] = true;
-        $response               = $client->request($method, $url, $options);
-
-        // Return the result body
+        // Return the response body
         return $response->getBody();
     }
 
@@ -109,17 +108,43 @@ class Helper
      * @param  string   $direction  Direction to sort the results by
      *
      * @return  object[]    A list of numbers with meta data
-     *
-     * @deprecated  Use \TCorp\Legacy\T3Api::getNumbers() instead
      */
     public static function getNumbers($prefix = '1300', $type = 'FLASH',
         $minPrice = 0, $maxPrice = 1000, $pageNo = 1, $pageSize = 500,
         $sortBy = 'PRICE', $direction = 'ASCENDING')
     {
-        trigger_error('Method ' . __METHOD__ . ' is deprecated', E_USER_DEPRECATED);
 
-        return Factory::getT3Api()->getNumbers($prefix, $type, $minPrice,
-            $maxPrice, $pageNo, $pageSize, $sortBy, $direction);
+        // Compose an enpoint URL
+        $params                       = [];
+        $params['query']              = $prefix;
+        $params['numberTypes']        = 'SERVICE_NUMBER';
+        $params['serviceNumberTypes'] = $type;
+        $params['minPriceDollars']    = $minPrice;
+        $params['maxPriceDollars']    = $maxPrice;
+        $params['pageNum']            = $pageNo;
+        $params['pageSize']           = $pageSize;
+        $params['sortBy']             = $sortBy;
+        $params['sortDirection']      = $direction;
+
+
+        // Get the data from the API
+        $result = static::sendRequest(
+            'https://portal.tbill.live/numbers-service-impl/api/Activations',
+            'GET', $params, ['Content-type: application/json']);
+
+        // Decode JSON response
+        $result = json_decode($result);
+
+        // Add additional meta data
+        foreach($result as $number) {
+            $number->format1 = preg_replace('|^(\d{4})(\d{6})$|i', '$1 $2', $number->number);
+	        $number->format2 = preg_replace('|^(\d{4})(\d{3})(\d{3})$|i', '$1 $2 $3', $number->number);
+            $number->format3 = preg_replace('|^(\d{4})(\d{2})(\d{2})(\d{2})$|i', '$1 $2 $3 $4', $number->number);
+            $number->format4 = (!empty($number->word) ? $number->word : $number->format3);
+        }
+
+        // Return the result
+        return $result;
     }
 
 
@@ -137,7 +162,7 @@ class Helper
      * @return bool                 TRUE if successfully sent, FALSE otherwise
      */
     public static function sendEmail(string $to, string $from, string $subject,
-        string $message, string $cc = '', string $bcc = '', $headers = array())
+        string $message, string $cc = '', string $bcc = '', $headers = [])
     {
         // Add some mime headers if the message contains HTML
         if ($message != strip_tags($message)) {
@@ -268,15 +293,15 @@ class Helper
     }
 
 
-
     /**
      * Look up the details for a given ABN using an API
      * -------------------------------------------------------------------------
-     * @param  string   $abn    The ABN to lookup
+     * @param  string   $abn        The ABN to lookup
+     * @param string    $apikey     ApiKey/GUID for authentication
      *
      * @return object   ABN details, or False if ABN not found
      */
-    public static function getABNDetails(string $abn)
+    public static function getABNDetails(string $abn, string $apikey)
     {
         // Initialise some local variables
         $result = new \stdClass();
@@ -285,69 +310,63 @@ class Helper
         $url = "https://abr.business.gov.au/abrxmlsearch/" .
             "AbrXmlSearch.asmx/ABRSearchByABN";
 
-        $data = self::sendRequest($url, 'GET', array(
+        $data = static::sendRequest($url, 'GET', array(
             'searchString'             => $abn,
             'includeHistoricalDetails' => 'Y',
-            'authenticationGuid'       => self::$abnLookupGuid
+            'authenticationGuid'       => $apikey
         ));
+
 
         // Parse the data returned by the API
         $data = new \SimpleXMLElement($data);
         $data = $data->response;
 
-        $result->statement = (string) $data->usageStatement;
-        $result->abn       = (string) $data->businessEntity->ABN->identifierValue;
-        $result->current   = (string) $data->businessEntity->ABN->isCurrentIndicator;
-        $result->asicNo    = (string) $data->businessEntity->ASICNumber;
+        $exception = (string) $data->exception;
+        if (empty($exception)) {
 
-        $entityType               = $data->businessEntity->entityType;
-        $result->entityType       = new \stdClass;
-        $result->entityType->code = (string) $entityType->entityTypeCode;
-        $result->entityType->desc = (string) $entityType->entityDescription;
+            $result->statement               = (string) $data->usageStatement;
+            $result->abn                     = (string) $data->businessEntity->ABN->identifierValue;
+            $result->current                 = (string) $data->businessEntity->ABN->isCurrentIndicator;
+            $result->asicNo                  = (string) $data->businessEntity->ASICNumber;
+            $entityType                      = $data->businessEntity->entityType;
+            $result->entityType              = new \stdClass;
+            $result->entityType->code        = (string) $entityType->entityTypeCode;
+            $result->entityType->desc        = (string) $entityType->entityDescription;
+            $legalName                       = $data->businessEntity->legalName;
+            $result->legalName               = new \stdClass;
+            $result->legalName->firstname    = (string) $legalName->givenName;
+            $result->legalName->othername    = (string) $legalName->otherGivenName;
+            $result->legalName->lastname     = (string) $legalName->familyName;
+            $mainName                        = $data->businessEntity->mainName;
+            $result->mainName                = new \stdClass;
+            $result->mainName->organisation  = (string) $mainName->organisationName;
+            $result->mainName->effective     = (string) $mainName->effectiveFrom;
+            $tradeName                       = $data->businessEntity->mainTradingName;
+            $result->tradeName               = new \stdClass;
+            $result->tradeName->organisation = (string) $tradeName->organisationName;
+            $result->tradeName->effective    = (string) $tradeName->effectiveFrom;
 
-        $legalName                    = $data->businessEntity->legalName;
-        $result->legalName            = new \stdClass;
-        $result->legalName->firstname = (string) $legalName->givenName;
-        $result->legalName->othername = (string) $legalName->otherGivenName;
-        $result->legalName->lastname  = (string) $legalName->familyName;
+        } else {
 
-        $mainName                       = $data->businessEntity->mainName;
-        $result->mainName               = new \stdClass;
-        $result->mainName->organisation = (string) $mainName->organisationName;
-        $result->mainName->effective    = (string) $mainName->effectiveFrom;
+            $result->statement               = '';
+            $result->abn                     = '';
+            $result->current                 = '';
+            $result->asicNo                  = '';
+            $result->entityType              = new \stdClass;
+            $result->entityType->code        = '';
+            $result->entityType->desc        = '';
+            $result->legalName               = new \stdClass;
+            $result->legalName->firstname    = '';
+            $result->legalName->othername    = '';
+            $result->legalName->lastname     = '';
+            $result->mainName                = new \stdClass;
+            $result->mainName->organisation  = '';
+            $result->mainName->effective     = '';
+            $result->tradeName               = new \stdClass;
+            $result->tradeName->organisation = '';
+            $result->tradeName->effective    = '';
 
-        $tradeName                       = $data->businessEntity->mainTradingName;
-        $result->tradeName               = new \stdClass;
-        $result->tradeName->organisation = (string) $tradeName->organisationName;
-        $result->tradeName->effective    = (string) $tradeName->effectiveFrom;
-
-        // Return the result
-        return $result;
-    }
-
-
-    /**
-     * Check if the remote user's IP is from certain countries. This method
-     * uses the IP Geolocation Service for up-to-date IP to location data.
-     * API keys for this service can be obtained at https://ipgeolocation.io/
-     * -------------------------------------------------------------------------
-     * @param   array   $countryCodes     List of 2 or 3 char country codes
-     * @param   string  $apiKey           API key issued by
-     *
-     * @return  bool    TRUE = IP belongs to one of the countries, FALSE is not
-     */
-    public static function checkIpLocation(array $countryCodes,
-        string $apiKey) : bool
-    {
-        // Get location information from the API
-        $endpoint  = "https://api.ipgeolocation.io/ipgeo?apiKey=$apiKey";
-        $endpoint .=  "&ip=" . $_SERVER['REMOTE_ADDR'];
-        $location = file_get_contents($endpoint);
-        $location = json_decode($location);
-
-        // Check if the IP belongs to one of the given countries
-        $result = in_array($location->country_code2, $countryCodes) ||
-            in_array($location->country_code3, $countryCodes);
+        }
 
         // Return the result
         return $result;
@@ -358,8 +377,8 @@ class Helper
     /**
      *  Block the user if thier IP belongs to a banned country. static::
      *  WORST_SPAM_COUNTRIES is a predefined list of the worst spam/bot
-     *  countries according to Spamhaus. To avoid blocking Googlebot, the US is
-     *  exluded from this predefined list.
+     *  countries according to Spamhaus. To avoid blocking Googlebot, the
+     *  US is exluded from this predefined list.
      *  ------------------------------------------------------------------------
      *  @return void
      */
@@ -367,7 +386,8 @@ class Helper
     {
         if (static::checkIpLocation(static::WORST_SPAM_COUNTRIES,
             static::$ipGeolocationApiKey)) {
-            static::blockAccess();
+
+            static::block();
         }
     }
 
@@ -405,9 +425,32 @@ class Helper
     public static function blockIfInvalidHoneypot() : void
     {
         if (!static::checkHoneypot()) {
-            static::blockAccess();
+            static::block();
         }
     }
+
+
+    /**
+     * Get a CSRF token that can used to protect the site from XSS attacks
+     * -------------------------------------------------------------------------
+     * @return string   A CSRF token
+     */
+    public static function getCSRFToken()
+    {
+        // Start the session if not already started
+        if (!isset($_SESSION)) {
+            session_start();
+        }
+
+        // Generate and set the token if none exist in the session
+        if (empty($_SESSION['CSRF'])) {
+            $_SESSION['CSRF'] = bin2hex(random_bytes(32));
+        }
+
+        // Return the result
+        return $_SESSION['CSRF'];
+    }
+
 
 
     /**
@@ -458,7 +501,7 @@ class Helper
     public static function blockIfInvalidCSRFToken() : void
     {
         if (!static::checkCSRFToken()) {
-            static::blockAccess();
+            static::block();
         }
     }
 
@@ -466,26 +509,26 @@ class Helper
     /**
      * Get the HTML/Javascript for displaying a reCAPTCHA 3
      * -------------------------------------------------------------------------
-     * @return  string  HTML for rendering a CSRF token inside a web form
+     * @param  string   $key        reCAPTCHA Site Key (issued by Google)
+     *
+     * @return string   HTML/Javascript needed to render reCAPTCHA 3
      */
-    public static function getReCaptchaHtml()
+    public static function getReCaptchaHtml(string $siteKey)
     {
-        $siteKey = static::$recaptchaSiteKey;
         $result  = "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>\n";
         $result .= "<div class=\"g-recaptcha\" data-sitekey=\"$siteKey\"></div>";
         return $result;
     }
 
 
-
     /**
      * Check if the user was successfully completed a reCAPTCHA 3
      * -------------------------------------------------------------------------
-     * @param  string   $key    reCAPTCHA Secret Key (issued by Google)
+     * @param  string   $secretKey    reCAPTCHA Secret Key (issued by Google)
      *
      * @return  bool
      */
-    public static function checkReCaptcha()
+    public static function checkReCaptcha(string $secretKey)
     {
         // Initialise some local variables
         $response  = $_POST['g-recaptcha-response'] ?? '';
@@ -493,7 +536,7 @@ class Helper
         // Send POST http request to verify the response with Google
         $client = new \GuzzleHttp\Client();
         $url    = 'https://www.google.com/recaptcha/api/siteverify';
-        $params = ['secret' => static::$recaptchaSecret, 'response' => $response];
+        $params = ['secret' => $secretKey, 'response' => $response];
         $result = $client->post($url, ['form_params' => $params]);
         $result = json_decode($result->getBody());
 
@@ -513,7 +556,7 @@ class Helper
      */
     public static function redirectIfInvalidReCaptcha(string $redirectUrl) : void
     {
-        if (!static::checkReCaptcha()) {
+        if (!static::checkReCaptcha(static::$recaptchaSecret)) {
             static::redirect($redirectUrl, false, 303);
         }
     }
@@ -544,6 +587,7 @@ class Helper
             session_start();
         }
     }
+
 
     /**
      * Set a value in the user's session
@@ -582,7 +626,7 @@ class Helper
      */
     public static function unsetSessionVar(string $key)
     {
-        $result = self::getSessionVar($key);
+        $result = static::get($key);
         unset($_SESSION[$key]);
         return $result;
     }
@@ -606,15 +650,15 @@ class Helper
         $default = '', string $filter = 'STRING')
     {
         if (isset($_REQUEST[$var])) {
-            self::setSessionVar($key, $_REQUEST[$var]);
+            static::setSessionVar($key, $_REQUEST[$var]);
         } else {
             if (!isset($_SESSION[$key])) {
-                self::setSessionVar($key, $default);
+                static::setSessionVar($key, $default);
             }
         }
 
         // Return the result
-        return self::getSessionVar($key);
+        return static::getSessionVar($key);
     }
 
 
@@ -667,17 +711,44 @@ class Helper
 
 
     /**
+     * Check if the remote user's IP is from certain countries. This method
+     * uses the IP Geolocation Service for up-to-date IP to location data.
+     * API keys for this service can be obtained at https://ipgeolocation.io/
+     * -------------------------------------------------------------------------
+     * @param   array   $countryCodes     List of 2 or 3 char country codes
+     * @param   string  $apiKey           API key issued by
+     *
+     * @return  bool    TRUE = IP belongs to one of the countries, FALSE is not
+     */
+    public static function checkIpLocation(array $countryCodes,
+        string $apiKey) : bool
+    {
+        // Get location information from the API
+        $endpoint  = "https://api.ipgeolocation.io/ipgeo?apiKey=$apiKey";
+        $endpoint .=  "&ip=" . $_SERVER['REMOTE_ADDR'];
+        $location = file_get_contents($endpoint);
+        $location = json_decode($location);
+
+        // Check if the IP belongs to one of the given countries
+        $result = in_array($location->country_code2, $countryCodes) ||
+            in_array($location->country_code3, $countryCodes);
+
+        // Return the result
+        return $result;
+    }
+
+
+    /**
       * Block access to the site with a given HTTP response code and message
       * ------------------------------------------------------------------------
       * @param integer $httpCode        HTTP response code to send
       * @param string  $httpMessage     Message to send with the response code
       */
-    public static function blockAccess(int $httpCode = 403, string
+    public static function block(int $httpCode = 403, string
         $httpMessage = 'Forbidden') : void
     {
         header("HTTP/1.0 $httpCode $httpMessage");
         die();
     }
-
 
 }
