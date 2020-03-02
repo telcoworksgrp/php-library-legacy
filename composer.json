@@ -28,8 +28,7 @@
     "autoload": {
 
         "psr-4": {
-            "TelcoworksGrp\\Legacy\\" : "src/",
-            "TCorp\\Legacy\\"         : "src2/"
+            "TelcoworksGrp\\Legacy\\" : "src/"
         }
     },
 
