@@ -37,11 +37,15 @@ class WebApi
      */
     public function send(string $resource, array $params = [])
     {
-        // Send the request
-        $response = Helper::sendRequest($this->baseUri . $resource,
-            'GET', $params, ['Content-type: application/json']);
+        // Send the request and get the response
+        $client = Factory::getHttp();
+        $response = $client->get($this->baseUri . $resource, [
+            'query'       => $params,
+            'headers'     => ['Content-type: application/json'],
+            'http_errors' => true
+        ]);
 
-        // Decode JSON response
+        // Parse the response
         $result = json_decode($response);
 
         // Return the result
