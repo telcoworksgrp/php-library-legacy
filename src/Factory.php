@@ -235,7 +235,7 @@ class Factory
     public static function getLog()
     {
         if (is_null(static::$log)) {
-            static::$log = new Log();
+            static::$log = new Log('');
         }
         return static::$log;
     }
