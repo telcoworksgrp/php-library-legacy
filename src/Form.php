@@ -104,7 +104,7 @@ class Form
 
         // Set the token if none alreasy exists
         if (!$session->exists('csrf')) {
-            $session->set('csrf', bin2hex(random_bytes(32));
+            $session->set('csrf', bin2hex(random_bytes(32)));
         }
 
         // Return the result
