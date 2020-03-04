@@ -53,6 +53,51 @@ class WebApi
     }
 
 
+    /**
+     * Get info for a single number
+     * -------------------------------------------------------------------------
+     * @param  string   $number     The number to lookup
+     *
+     * @return stdClass
+     */
+    public function getNumber(string $number)
+    {
+        // Sanitise the given number
+        $number = preg_replace('|[^0-9]|i', '', $number);
+
+        // Lookup the number in the web api
+        $result = $this->send("numbers/$number");
+
+        // Return the result
+        return $result;
+    }
+
+
+    /**
+     * Get info for a single word
+     * -------------------------------------------------------------------------
+     * @param  string   $number     The word to lookup
+     *
+     * @return stdClass
+     */
+    public function getWord(string $word)
+    {
+        // Sanitise the given number
+        $word = preg_replace('|[^0-9A-Z]|i', '', $word);
+
+        // Lookup the number in the web api
+        $result = $this->send("words/$word");
+
+        // Return the result
+        return $result;
+    }
+
+
+
+
+
+
+
 
     /**
      * Perform a simple number search and return a list of both results and
