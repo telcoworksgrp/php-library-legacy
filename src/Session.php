@@ -38,4 +38,31 @@ class Session extends JSession
     }
 
 
+    /**
+     * Set or replace a session value using a given input variable
+     * -------------------------------------------------------------------------
+     * @param string    $key        Dot seperated key name
+     * @param string    $var        Input variable name
+     * @param mixed     $default    Value to set if no input or session value
+     * @param string    $filter     Filter to appy to the input value
+     *
+     * @return mixed
+     */
+    public function setFromRequst(string $key, string $var, $default,
+        string $filter = 'string')
+    {
+        // Initialise some local variables
+        $input = Factory::getInput();
+
+        // Get value from input, session or a given default value
+        $value = $input->get($var, $this->get($key, $default), $filter);
+
+        // Update the session
+        $this->set($key, $value);
+
+        // Return the final value
+        return $value;
+    }
+
+
 }
