@@ -67,8 +67,8 @@ class Helper
         $minPrice = 0, $maxPrice = 1000, $pageNo = 1, $pageSize = 500,
         $sortBy = 'PRICE', $direction = 'ASCENDING')
     {
-        return Factory::getT3Api()->getNumbers($prefix, $type, $minPrice
-            $maxPrice, $pageNo, $pageSize, $sortBy, $direction);        
+        return Factory::getT3Api()->getNumbers($prefix, $type, $minPrice,
+            $maxPrice, $pageNo, $pageSize, $sortBy, $direction);
     }
 
 
@@ -529,7 +529,7 @@ class Helper
         $session->set($key, $result);
 
         // Return the result
-        return $result
+        return $result;
     }
 
 
