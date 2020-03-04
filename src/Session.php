@@ -48,7 +48,7 @@ class Session extends JSession
      *
      * @return mixed
      */
-    public function setFromRequst(string $key, string $var, $default,
+    public function setFromRequest(string $key, string $var, $default,
         string $filter = 'string')
     {
         // Initialise some local variables
