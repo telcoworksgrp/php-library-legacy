@@ -73,6 +73,38 @@ class WebApi
     }
 
 
+
+    /**
+     * Get a list of numbers from the web api
+     * -------------------------------------------------------------------------
+     * @param  array    $prefixes   A list of prefixes
+     * @param  string   $suffix     A full or partial suffix
+     * @param  int      $limit      Max items to return
+     * @param  int      $page       Page number
+     * @param  string   $orderby    Column to order items by
+     * @param  string   $direction  Direct to order items in
+     *
+     * @return stdClass
+     */
+    public function getNumbers(array $prefixes = [], string $suffix = '', 
+        int $limit = 100, int $page = 1, string $orderby = 'number',
+        string $direction = 'asc') : stdClass
+    {
+        // Get the list from the web api
+        $result = $this->send('numbers', [
+            'prefix'   => $prefixes,
+            'suffix'   => $suffix,
+            'limit'    => $limit,
+            'page'     => $page,
+            'orderby'  => $orderby,
+            'orderdir' => $direction
+        ]);
+
+        // Return the result
+        return $result;
+    }
+
+
     /**
      * Get info for a single word
      * -------------------------------------------------------------------------
@@ -93,12 +125,6 @@ class WebApi
     }
 
 
-
-
-
-
-
-
     /**
      * Perform a simple number search and return a list of both results and
      * suggestions
@@ -114,6 +140,8 @@ class WebApi
         $result = new \stdClass;
 
         // Get a list of results
+        if (strlen($suffix) >= 6)
+
         $result->results = $this->send('numbers', [
             'prefix' => $prefixes,
             'suffix' => $suffix
