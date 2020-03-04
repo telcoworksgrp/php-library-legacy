@@ -32,26 +32,24 @@
 
 
       /**
-       * Filename of the log file
-       *
-       * @var string
-       */
-      protected $filename = "legacy.log";
-
-
-
-      /**
        * Constructor for initialising new instances of this class
        * ------------------------------------------------------------------------
        */
       public function __construct(string $name, array $handlers = [],
         array $processors = [], ?DateTimeZone $timezone = null)
       {
+        // Initialise some local variables
+        $config = Factory::getConfig();
+
         // Call the parent constructor
         parent::__construct($name, $handlers, $processors, $timezone);
 
-         // Add a file stream handler
-         $handler = new StreamHandler("{$_SERVER['DOCUMENT_ROOT']}/{$this->filename}");
+         // Get the log file filename
+         $filename = $config->get('log.filename',
+            $_SERVER['DOCUMENT_ROOT'] . '/legacy.log');
+
+        // Add a file stream handler
+         $handler = new StreamHandler($filename);
          $handler->setFormatter(new LineFormatter($this->format));
          $this->pushHandler($handler);
 

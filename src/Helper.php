@@ -23,51 +23,6 @@ class Helper
         'July','August','September','October','November','December');
 
 
-    /**
-     * Country codes for some of the worst spam and bot countries according
-     * to Spamhaus.
-     *
-     * @var string[]
-     *
-     * @link https://www.spamhaus.org/statistics/countries/
-     * @link  https://www.spamhaus.org/statistics/botnet-cc/
-     */
-    const WORST_SPAM_COUNTRIES = array('CN','RU','UA','IN','FR','JP','GB',
-    'HK','DE','EG','VN','IR','BR','TH','ID','PA','GG');
-
-
-
-    /**
-     * An API key issued by IP Geolocation
-     *
-     * @var string
-     */
-    public static $ipGeolocationApiKey = '';
-
-
-    /**
-     * A ReCaptcha v2 site key issued by Google
-     *
-     * @var string
-     */
-    public static $recaptchaSiteKey = '';
-
-
-    /**
-     * A ReCaptcha v2 secret issued by Google
-     *
-     * @var string
-     */
-    public static $recaptchaSecret = '';
-
-    /**
-     * GUID used for looking up ABN Details
-     *
-     * @var string
-     */
-    public static $abnLookupGuid = '';
-
-
 
     /**
      * Send a very basic HTTP request and return the response body
@@ -112,38 +67,8 @@ class Helper
         $minPrice = 0, $maxPrice = 1000, $pageNo = 1, $pageSize = 500,
         $sortBy = 'PRICE', $direction = 'ASCENDING')
     {
-
-        // Compose an enpoint URL
-        $params                       = [];
-        $params['query']              = $prefix;
-        $params['numberTypes']        = 'SERVICE_NUMBER';
-        $params['serviceNumberTypes'] = $type;
-        $params['minPriceDollars']    = $minPrice;
-        $params['maxPriceDollars']    = $maxPrice;
-        $params['pageNum']            = $pageNo;
-        $params['pageSize']           = $pageSize;
-        $params['sortBy']             = $sortBy;
-        $params['sortDirection']      = $direction;
-
-
-        // Get the data from the API
-        $result = static::sendRequest(
-            'https://portal.tbill.live/numbers-service-impl/api/Activations',
-            'GET', $params, ['Content-type: application/json']);
-
-        // Decode JSON response
-        $result = json_decode($result);
-
-        // Add additional meta data
-        foreach($result as $number) {
-            $number->format1 = preg_replace('|^(\d{4})(\d{6})$|i', '$1 $2', $number->number);
-	        $number->format2 = preg_replace('|^(\d{4})(\d{3})(\d{3})$|i', '$1 $2 $3', $number->number);
-            $number->format3 = preg_replace('|^(\d{4})(\d{2})(\d{2})(\d{2})$|i', '$1 $2 $3 $4', $number->number);
-            $number->format4 = (!empty($number->word) ? $number->word : $number->format3);
-        }
-
-        // Return the result
-        return $result;
+        return Factory::getT3Api()->getNumbers($prefix, $type, $minPrice
+            $maxPrice, $pageNo, $pageSize, $sortBy, $direction);        
     }
 
 
@@ -265,12 +190,13 @@ class Helper
     public static function redirect(string $url, bool $preserveParams = TRUE,
         int $statusCode = 301) : void
     {
+        // Initialise some local variables
+        $input = Factory::getInput();
+
         // Append the exitsing params if needed
         if ($preserveParams) {
-
             $url = $url . ((strpos($url, '?')) ? '&' : '?') .
-                $_SERVER['QUERY_STRING'];
-
+                $input->server('QUERY_STRING');
         }
 
         // Redirect the user
@@ -300,10 +226,12 @@ class Helper
      *
      * @return object   ABN details, or False if ABN not found
      */
-    public static function getABNDetails(string $abn, string $apikey)
+    public static function getABNDetails(string $abn, string $apikey = '')
     {
         // Initialise some local variables
+        $config = Factory::getConfig();
         $result = new \stdClass();
+        $key    = $config->get('abnlookup.apikey', $apikey);
 
         // Look up the ABN details using ABR's API
         $url = "https://abr.business.gov.au/abrxmlsearch/" .
@@ -312,7 +240,7 @@ class Helper
         $data = static::sendRequest($url, 'GET', array(
             'searchString'             => $abn,
             'includeHistoricalDetails' => 'Y',
-            'authenticationGuid'       => $apikey
+            'authenticationGuid'       => $key
         ));
 
 
@@ -374,20 +302,13 @@ class Helper
 
 
     /**
-     *  Block the user if thier IP belongs to a banned country. static::
-     *  WORST_SPAM_COUNTRIES is a predefined list of the worst spam/bot
-     *  countries according to Spamhaus. To avoid blocking Googlebot, the
-     *  US is exluded from this predefined list.
+     *  Block access to all banned countries
      *  ------------------------------------------------------------------------
      *  @return void
      */
     public static function blockBannedCountries() : void
     {
-        if (static::checkIpLocation(static::WORST_SPAM_COUNTRIES,
-            static::$ipGeolocationApiKey)) {
-
-            static::block();
-        }
+        Factory::getFirewall()->blockBannedCountries();
     }
 
 
@@ -398,8 +319,7 @@ class Helper
      */
     public static function getHoneypotHtml() : string
     {
-        return "<input type=\"text\" name=\"c67538\" value=\"\" " .
-            "style=\"display: none !important;\">";
+        return Factory::getForm()->getHoneypotHtml();
     }
 
 
@@ -411,7 +331,7 @@ class Helper
      */
     public static function checkHoneypot() : bool
     {
-        return ($_POST['c67538'] ?? '-') === '';
+        return Factory::getForm()->checkHoneypot();
     }
 
 
@@ -423,8 +343,8 @@ class Helper
      */
     public static function blockIfInvalidHoneypot() : void
     {
-        if (!static::checkHoneypot()) {
-            static::block();
+        if (!Factory::getForm()->checkHoneypot()) {
+            Factory::getFirewall()->block();
         }
     }
 
@@ -436,18 +356,7 @@ class Helper
      */
     public static function getCSRFToken()
     {
-        // Start the session if not already started
-        if (!isset($_SESSION)) {
-            session_start();
-        }
-
-        // Generate and set the token if none exist in the session
-        if (empty($_SESSION['CSRF'])) {
-            $_SESSION['CSRF'] = bin2hex(random_bytes(32));
-        }
-
-        // Return the result
-        return $_SESSION['CSRF'];
+        return Factory::getForm()->getCsrfToken();
     }
 
 
@@ -459,14 +368,7 @@ class Helper
      */
     public static function getCSRFTokenHTML() : string
     {
-        // Get a CSRF token
-        $token = static::getCSRFToken();
-
-        // Compose a HTML input form field
-        $result = "<input type=\"hidden\" name=\"CSRF\" value=\"$token\">";
-
-        // Return the result
-        return $result;
+        return Factory::getForm()->getCsrfTokenHTML();
     }
 
 
@@ -478,16 +380,7 @@ class Helper
      */
     public static function checkCSRFToken() : bool
     {
-        // Start the session if not already started
-        if (!isset($_SESSION)) {
-            session_start();
-        }
-
-        // Get the token submited in the post request
-        $token = $_POST['CSRF'] ?? '';
-
-        // Rteurn the result
-        return hash_equals($_SESSION['CSRF'], $token);
+        return Factory::getForm()->checkCsrfToken();
     }
 
 
@@ -499,8 +392,8 @@ class Helper
      */
     public static function blockIfInvalidCSRFToken() : void
     {
-        if (!static::checkCSRFToken()) {
-            static::block();
+        if (!Factory::getForm()->checkCsrfToken()) {
+            Factory::getFirewall()->block();
         }
     }
 
@@ -508,15 +401,11 @@ class Helper
     /**
      * Get the HTML/Javascript for displaying a reCAPTCHA 3
      * -------------------------------------------------------------------------
-     * @param  string   $key        reCAPTCHA Site Key (issued by Google)
-     *
-     * @return string   HTML/Javascript needed to render reCAPTCHA 3
+     * @return string
      */
-    public static function getReCaptchaHtml(string $siteKey)
+    public static function getReCaptchaHtml()
     {
-        $result  = "<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>\n";
-        $result .= "<div class=\"g-recaptcha\" data-sitekey=\"$siteKey\"></div>";
-        return $result;
+        return Factory::getForm()->getReCaptchaHtml();
     }
 
 
@@ -527,23 +416,9 @@ class Helper
      *
      * @return  bool
      */
-    public static function checkReCaptcha(string $secretKey)
+    public static function checkReCaptcha()
     {
-        // Initialise some local variables
-        $response  = $_POST['g-recaptcha-response'] ?? '';
-
-        // Send POST http request to verify the response with Google
-        $client = new \GuzzleHttp\Client();
-        $url    = 'https://www.google.com/recaptcha/api/siteverify';
-        $params = ['secret' => $secretKey, 'response' => $response];
-        $result = $client->post($url, ['form_params' => $params]);
-        $result = json_decode($result->getBody());
-
-        // Check google's response
-        $result = $result->success == true;
-
-        // Return the result
-        return $result;
+        return Factory::getForm()->checkReCaptcha();
     }
 
 
@@ -555,7 +430,7 @@ class Helper
      */
     public static function redirectIfInvalidReCaptcha(string $redirectUrl) : void
     {
-        if (!static::checkReCaptcha(static::$recaptchaSecret)) {
+        if (!Factory::getForm()->checkReCaptcha()) {
             static::redirect($redirectUrl, false, 303);
         }
     }
@@ -571,7 +446,7 @@ class Helper
      */
     public static function getAffiliateReferralId()
     {
-        return $_REQUEST['affiliate'] ?? '';
+        return Factory::getInput()->get('affiliate', '');
     }
 
 
@@ -582,9 +457,7 @@ class Helper
      */
     public static function startSession()
     {
-        if (!isset($_SESSION)) {
-            session_start();
-        }
+        Factory::getSession()->start();
     }
 
 
@@ -596,8 +469,7 @@ class Helper
      */
     public static function setSessionVar(string $key, $value)
     {
-        // Set a session variable with the given value
-        $_SESSION[$key] = $value;
+        Factory::getSession()->set($key, $value);
     }
 
 
@@ -612,7 +484,7 @@ class Helper
      */
     public static function getSessionVar(string $key, $default = null)
     {
-        return $_SESSION[$key] ?? $default;
+        return Factory::getSession()->get($key, $default);
     }
 
 
@@ -621,13 +493,11 @@ class Helper
      * -------------------------------------------------------------------------
      * @param string    $key    A key name for referancing the stored value
      *
-     * @return  mixed   The former value of the session var
+     * @return  void
      */
     public static function unsetSessionVar(string $key)
     {
-        $result = static::get($key);
-        unset($_SESSION[$key]);
-        return $result;
+        Factory::getSession()->remove($key);
     }
 
 
@@ -648,16 +518,18 @@ class Helper
     public static function setSessionVarFromRequest(string $key, string $var,
         $default = '', string $filter = 'STRING')
     {
-        if (isset($_REQUEST[$var])) {
-            static::setSessionVar($key, $_REQUEST[$var]);
-        } else {
-            if (!isset($_SESSION[$key])) {
-                static::setSessionVar($key, $default);
-            }
-        }
+        // Initialise some local variables
+        $session = Factory::getSession();
+        $input   = Factory::getInput();
+
+        // Get the value from the input, session or default value given
+        $result = $input->get($var, $session->get($key, $default), $filter);
+
+        // Update the value stored in the session
+        $session->set($key, $result);
 
         // Return the result
-        return static::getSessionVar($key);
+        return $result
     }
 
 
@@ -668,7 +540,7 @@ class Helper
      */
     public static function getRemoteIPAddress()
     {
-        return $_SERVER['REMOTE_ADDR'];
+        return Factory::getInput()->server('REMOTE_ADDR', '');
     }
 
 
@@ -679,7 +551,7 @@ class Helper
      */
     public static function getRemoteUserAgent()
     {
-        return $_SERVER['HTTP_USER_AGENT'];
+        return Factory::getAgent()->getUserAgent();
     }
 
 
@@ -690,7 +562,7 @@ class Helper
      */
     public static function getCurrentDomainName()
     {
-        return $_SERVER['HTTP_HOST'];
+        return Factory::getInput()->server('HTTP_HOST', '');
     }
 
 
@@ -704,36 +576,7 @@ class Helper
      */
     public static function getPostValue(string $name, $default = '')
     {
-        return (isset($_POST[$name])) ?
-            htmlspecialchars($_POST[$name]) : $default;
-    }
-
-
-    /**
-     * Check if the remote user's IP is from certain countries. This method
-     * uses the IP Geolocation Service for up-to-date IP to location data.
-     * API keys for this service can be obtained at https://ipgeolocation.io/
-     * -------------------------------------------------------------------------
-     * @param   array   $countryCodes     List of 2 or 3 char country codes
-     * @param   string  $apiKey           API key issued by
-     *
-     * @return  bool    TRUE = IP belongs to one of the countries, FALSE is not
-     */
-    public static function checkIpLocation(array $countryCodes,
-        string $apiKey) : bool
-    {
-        // Get location information from the API
-        $endpoint  = "https://api.ipgeolocation.io/ipgeo?apiKey=$apiKey";
-        $endpoint .=  "&ip=" . $_SERVER['REMOTE_ADDR'];
-        $location = file_get_contents($endpoint);
-        $location = json_decode($location);
-
-        // Check if the IP belongs to one of the given countries
-        $result = in_array($location->country_code2, $countryCodes) ||
-            in_array($location->country_code3, $countryCodes);
-
-        // Return the result
-        return $result;
+        return Factory::getInput()->post($name, $default);
     }
 
 
@@ -746,7 +589,6 @@ class Helper
     public static function block(int $httpCode = 403, string
         $httpMessage = 'Forbidden') : void
     {
-        header("HTTP/1.0 $httpCode $httpMessage");
-        die();
+        Factory::getFirewall()->block();
     }
 }
