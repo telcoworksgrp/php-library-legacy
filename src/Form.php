@@ -147,7 +147,7 @@ class Form
         $token = $input->get('csrf', '');
 
         // Check if the token is valid
-        $result = hash_equals($this->getCsrfToken(), $token)
+        $result = hash_equals($this->getCsrfToken(), $token);
 
         // Return the result
         return $result;
