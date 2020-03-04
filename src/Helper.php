@@ -518,18 +518,8 @@ class Helper
     public static function setSessionVarFromRequest(string $key, string $var,
         $default = '', string $filter = 'STRING')
     {
-        // Initialise some local variables
-        $session = Factory::getSession();
-        $input   = Factory::getInput();
-
-        // Get the value from the input, session or default value given
-        $result = $input->get($var, $session->get($key, $default), $filter);
-
-        // Update the value stored in the session
-        $session->set($key, $result);
-
-        // Return the result
-        return $result;
+        return Factory::getSession()->setFromRequest(
+            $key, $var, $default, $filter);
     }
 
 
