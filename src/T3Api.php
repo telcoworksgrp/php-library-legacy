@@ -46,7 +46,7 @@ class T3Api
         ]);
 
         // Parse the response
-        $result = json_decode($response);
+        $result = json_decode($response->getBody());
 
         // Return the result
         return $result;

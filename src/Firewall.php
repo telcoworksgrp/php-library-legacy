@@ -39,7 +39,7 @@ class Firewall
         // Initialise some local variables
         $input  = Factory::getInput();
         $config = Factory::getConfig();
-        $log    = Factory::getLog();        
+        $log    = Factory::getLog();
 
         // Make sure we have a valid code and message
         $code = (is_null($code)) ?
@@ -139,7 +139,7 @@ class Firewall
         ]);
 
         // Parse the response
-        $result = json_decode($response);
+        $result = json_decode($response->getBody());
 
         // Return the result
         return $result;
