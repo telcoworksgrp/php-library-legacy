@@ -103,7 +103,7 @@ class Form
         $session = Factory::getSession();
 
         // Set the token if none alreasy exists
-        if (!$session->exists('csrf')) {
+        if (!$session->has('csrf')) {
             $session->set('csrf', bin2hex(random_bytes(32)));
         }
 
