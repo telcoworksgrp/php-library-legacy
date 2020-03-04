@@ -172,18 +172,11 @@ class WebApi
         $result = new \stdClass;
 
         // Get a list of results
-        if (strlen($suffix) >= 6)
-
-        $result->results = $this->send('numbers', [
-            'prefix' => $prefixes,
-            'suffix' => $suffix
-        ]);
+        $result->results = (strlen($suffix) >= 6) ?
+            $this->getNumbers($prefixes, $suffix) : false ;
 
         // Get a list of suggestions
-        $result->suggestions = $this->send('suggestions', [
-            'prefix' => $prefixes,
-            'suffix' => $suffix
-        ]);
+        $result->suggestions = $this->getSuggestions($prefixes, $suffix);
 
         // Return the result
         return $result;
