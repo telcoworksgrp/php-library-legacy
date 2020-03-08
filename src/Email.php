@@ -72,4 +72,20 @@ class Email extends PHPMailer
         return $this->setBody(ob_get_clean());
     }
 
+
+    /**
+     * Clear all addresses, attchments, etc
+     * -------------------------------------------------------------------------
+     * @return void
+     */
+    public function clear()
+    {
+        $this->clearAllRecipients();
+        $this->clearReplyTos();
+        $this->clearAttachments();
+        $this->clearCustomHeaders();
+        $this->setSubject('');
+        $this->setBody('');
+    }
+
 }
