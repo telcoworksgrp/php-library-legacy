@@ -68,7 +68,7 @@ class T3Api
      * @return  object[]    A list of numbers with meta data
      */
     public function getNumbers($prefix = '1300', $type = 'FLASH',
-        $minPrice = 0, $maxPrice = 1000, $page = 1, $limit = 500,
+        $minPrice = 0, $maxPrice = 10000, $page = 1, $limit = 10000,
         $sortBy = 'PRICE', $direction = 'ASCENDING')
     {
 
@@ -109,6 +109,23 @@ class T3Api
         $number->format3 = preg_replace('|^(\d{4})(\d{2})(\d{2})(\d{2})$|i', '$1 $2 $3 $4', $number->number);
         $number->format4 = (!empty($number->word) ? $number->word : $number->format3);
         return $number;
+    }
+
+
+    /**
+     * Get all 1300 and 1800 numbers exposed by the API
+     * -------------------------------------------------------------------------
+     * @return stdClass[]
+     */
+    public function getAllNumbers()
+    {
+        $result = $this->getNumbers('1300', 'FLASH');
+        $result = array_merge($result, $this->getNumbers('1300', 'LUCKY_DIP'));
+        $result = array_merge($result, $this->getNumbers('1800', 'FLASH'));
+        $result = array_merge($result, $this->getNumbers('1800', 'LUCKY_DIP'));
+
+        // Return the result
+        return $result;
     }
 
 }
