@@ -112,10 +112,10 @@ class Helper
         // Add some additional metadata to headers
         $headers['X-WebForm-ServerIP']   = $_SERVER['SERVER_ADDR'];
         $headers['X-WebForm-ServerName'] = $_SERVER['SERVER_NAME'];
-        $headers['X-WebForm-Host']       = static::getCurrentDomainName();
+        $headers['X-WebForm-Host']       = $_SERVER['HTTP_HOST'];
         $headers['X-WebForm-Referrer']   = $_SERVER['HTTP_REFERER'];
         $headers['X-WebForm-UserAgent']  = static::getRemoteUserAgent();
-        $headers['X-WebForm-RemoteIP']   = static::getRemoteIPAddress();
+        $headers['X-WebForm-RemoteIP']   = $_SERVER['REMOTE_ADDR'];
         $headers['X-WebForm-URI']        = $_SERVER['REQUEST_URI'];
         $headers['X-WebForm-Script']     = $_SERVER['SCRIPT_NAME'];
 
